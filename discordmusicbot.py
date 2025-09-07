@@ -175,16 +175,30 @@ async def play_logic(ctxi, url):
     if guild_id not in queues:
         queues[guild_id] = []
     try:
-        with yt_dlp.YoutubeDL({'format':'bestaudio','noplaylist':True}) as ydl:
+        ydl_opts = {
+            'format': 'bestaudio',
+            'quiet': True,
+            'extract_flat': True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+        if 'entries' in info:
+            # It's a playlist
+            added_titles = []
+            for entry in info['entries']:
+                video_url = f"https://www.youtube.com/watch?v={entry['id']}"
+                queues[guild_id].append({"url": video_url, "title": entry.get("title", "Unknown Title")})
+                added_titles.append(entry.get("title", "Unknown Title"))
+            await send_msg(ctxi, f"🎶 Added {len(added_titles)} videos from playlist to the queue.")
+        else:
             title = info.get("title", "Unknown Title")
-    except:
-        title = "Unknown Title"
-    queues[guild_id].append({"url": url, "title": title})
-    await send_msg(ctxi, f"🎶 Added to queue: {title}")
-    vc = ctxi.guild.voice_client
-    if vc and not vc.is_playing():
-        await play_next(ctxi)
+            queues[guild_id].append({"url": url, "title": title})
+            await send_msg(ctxi, f"🎶 Added to queue: {title}")
+        vc = ctxi.guild.voice_client
+        if vc and not vc.is_playing():
+            await play_next(ctxi)
+    except Exception as e:
+        await send_msg(ctxi, f"❌ Failed to add video/playlist: {e}")
 async def play_local_logic(ctxi, filename):
     filepath = os.path.join(MUSIC_FOLDER, filename)
     if not os.path.isfile(filepath):
