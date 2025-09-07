@@ -1,6 +1,13 @@
 # discord-musicbot
 lightweight discord music bot for youtube and local music
 
+⚠️ Attention! Using this bot extremely heavily (multiple youtube calls per second) might not be a good idea, since YouTube does not like bots, making too many calls might get your youtube account suspended. 
+Using this privately shouldn't be a problem at all though. 
+Use this at your own risk.
+
+<details>
+<summary> I HAVE READ THE ABOVE AND KNOW THE RISK.</summary>
+
 # Getting Started / Installation for Windows:
 
 1. ⚠️Required: Download and Install https://ffmpeg.org/
@@ -64,4 +71,4 @@ pyinstaller --noconsole --onefile discordmusicbot.py
 /resume - resumes current track
 /skip - skips corrent track
 ```
-
+</details>
