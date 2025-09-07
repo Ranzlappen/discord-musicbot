@@ -29,6 +29,7 @@ BOT_TOKEN = config.get("BOT_TOKEN")
 EMBED_TITLE = config.get("EMBED_TITLE")
 EMBED_DESCRIPTION = config.get("EMBED_DESCRIPTION")
 EMBED_ANIMATION_URL = config.get("EMBED_ANIMATION_URL")
+MAX_QUEUE = 100
 PAGE_SIZE = 25
 if not BOT_TOKEN or BOT_TOKEN.strip() == "":
     raise ValueError("❌ No bot token provided in config.json You can get your individual Bot Token by going to https://discord.com/developers/applications -> Your Application -> BOT -> TOKEN -> (RESET TOKEN)")
@@ -41,7 +42,19 @@ if not EMBED_DESCRIPTION:
 if not EMBED_ANIMATION_URL:
     EMBED_ANIMATION_URL = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f916/512.webp"
     warnings.warn("EMBED_ANIMATION_URL missing or empty in config. Using default value.")
-
+def split_message(text, limit=2000):
+    lines = text.split("\n")
+    chunks = []
+    current = ""
+    for line in lines:
+        if len(current) + len(line) + 1 > limit:
+            chunks.append(current)
+            current = line
+        else:
+            current += ("\n" if current else "") + line
+    if current:
+        chunks.append(current)
+    return chunks
 async def send_msg(ctxi, content, ephemeral: bool = True, view=None, delete_after: int = 5):
     msg = None
     if isinstance(ctxi, discord.Interaction):
@@ -186,11 +199,17 @@ async def play_logic(ctxi, url):
             # It's a playlist
             added_titles = []
             for entry in info['entries']:
+                if len(queues[guild_id]) >= MAX_QUEUE:
+                    await send_msg(ctxi, f"❌ Queue is full (max {MAX_QUEUE} songs).")
+                    break
                 video_url = f"https://www.youtube.com/watch?v={entry['id']}"
                 queues[guild_id].append({"url": video_url, "title": entry.get("title", "Unknown Title")})
                 added_titles.append(entry.get("title", "Unknown Title"))
             await send_msg(ctxi, f"🎶 Added {len(added_titles)} videos from playlist to the queue.")
         else:
+            if len(queues[guild_id]) >= MAX_QUEUE:
+                await send_msg(ctxi, f"❌ Queue is full (max {MAX_QUEUE} songs).")
+                return
             title = info.get("title", "Unknown Title")
             queues[guild_id].append({"url": url, "title": title})
             await send_msg(ctxi, f"🎶 Added to queue: {title}")
@@ -207,6 +226,9 @@ async def play_local_logic(ctxi, filename):
     guild_id = ctxi.guild.id
     if guild_id not in queues:
         queues[guild_id] = []
+    if len(queues[guild_id]) >= MAX_QUEUE:   # 👈 check here
+        await send_msg(ctxi, f"❌ Queue is full (max {MAX_QUEUE} songs).")
+        return
     queues[guild_id].append({"url": filepath, "title": filename, "local": True})
     vc = ctxi.guild.voice_client
     if not vc.is_playing():
@@ -249,9 +271,12 @@ class PaginatedFileSelect(View):
         start = self.page * PAGE_SIZE
         end = start + PAGE_SIZE
         page_files = self.files[start:end]
-        self.select.options = [
-            SelectOption(label=f, description=f"Queue {f}") for f in page_files
-        ]
+        options = []
+        for f in page_files:
+            desc = f"Queue {f}"
+            if len(desc)>100: desc = desc[:97]+"..."
+            options.append(SelectOption(label=f[:100], description=desc))
+        self.select.options = options
         self.prev_button.disabled = self.page == 0
         self.next_button.disabled = end >= len(self.files)
     async def select_callback(self, interaction: Interaction):
@@ -395,9 +420,13 @@ async def on_interaction(interaction: discord.Interaction):
             response_sent = True
     elif custom_id == "queue":
         qlist = queues.get(interaction.guild.id, [])
-        text = "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(qlist)]) or "Queue is empty."
+        if not qlist:
+            await send_msg(interaction, "Queue is empty.", ephemeral=True)
+            return
+        text = "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(qlist)])
+        if len(text) > 1900:
+            text = text[:1900] + "\n… (discord doesn't allow more text...)"
         await send_msg(interaction, f"📕 Queue:\n{text}", ephemeral=True)
-        response_sent = True
         return
     elif custom_id == "nowplaying":
         np = now_playings.get(interaction.guild.id)
