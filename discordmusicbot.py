@@ -3,11 +3,18 @@ import yt_dlp
 import asyncio
 import os
 import json
+import time
 import warnings
+import datetime
+import re
+from typing import Optional
+from gtts import gTTS
+from discord import FFmpegPCMAudio
 from discord import app_commands, SelectOption, Interaction, ButtonStyle
 from discord.ext import commands, tasks
 from discord.ui import View, Button, Select
 from discord import Embed
+from gtts.lang import tts_langs
 MUSIC_FOLDER = "music"
 os.makedirs(MUSIC_FOLDER, exist_ok=True)
 intents = discord.Intents.default()
@@ -18,6 +25,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree
 queues = {}
 now_playings = {}
+downloads = []
 control_messages = {}
 if not os.path.isfile("config.json"):
     raise FileNotFoundError(
@@ -28,21 +36,78 @@ with open("config.json", "r") as f:
 BOT_TOKEN = config.get("BOT_TOKEN")
 EMBED_TITLE = config.get("EMBED_TITLE")
 EMBED_DESCRIPTION = config.get("EMBED_DESCRIPTION")
-EMBED_ANIMATION_URL = config.get("EMBED_ANIMATION_URL")
-PAGE_SIZE = 25
+EMBED_IMAGE_URL = config.get("EMBED_IMAGE_URL")
+VALID_IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+MAX_QUEUE = config.get("MAX_SONG_QUEUE")
+COOLDOWN_PER_UPLOAD = config.get("COOLDOWN_PER_UPLOAD_IN_SECONDS")
+MESSAGE_CLUTTER_REMOVAL_DELAY = config.get("MESSAGE_CLUTTER_REMOVAL_DELAY")
+DEFAULT_TTS_LANGUAGE = config.get("DEFAULT_TTS_LANGUAGE")
+VALID_TTS_LANGUAGES = ("af", "am", "ar", "bg", "bn", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es", "et", "eu", "fi", "fr", "fr-CA", "gl", "gu", "ha", "hi", "hr", "hu", "id", "is", "it", "iw", "ja", "jw", "km", "kn", "ko", "la", "lt", "lv", "ml", "mr", "ms", "my", "ne", "nl", "no", "pa", "pl", "pt", "pt-PT", "ro", "ru", "si", "sk", "sq", "sr", "su", "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "yue", "zh-CN", "zh-TW", "zh")
+PAGE_SIZE = 25 # discord limits this to 25
+def is_valid_image_url(url: str) -> bool:
+    from urllib.parse import urlparse
+    try:
+        result = urlparse(url)
+        if not all([result.scheme in ("http", "https"), result.netloc]):
+            return False
+        return url.lower().endswith(VALID_IMAGE_EXTENSIONS)
+    except:
+        return False
 if not BOT_TOKEN or BOT_TOKEN.strip() == "":
     raise ValueError("❌ No bot token provided in config.json You can get your individual Bot Token by going to https://discord.com/developers/applications -> Your Application -> BOT -> TOKEN -> (RESET TOKEN)")
 if not EMBED_TITLE:
     EMBED_TITLE = "Music Controls"
-    warnings.warn("EMBED_NAME missing or empty in config. Using default value.")
+    warnings.warn("EMBED_NAME missing in config. Using default value.")
 if not EMBED_DESCRIPTION:
     EMBED_DESCRIPTION = "Use the buttons below to control music."
-    warnings.warn("EMBED_DESCRIPTION missing or empty in config. Using default value.")
-if not EMBED_ANIMATION_URL:
-    EMBED_ANIMATION_URL = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f916/512.webp"
-    warnings.warn("EMBED_ANIMATION_URL missing or empty in config. Using default value.")
-
-async def send_msg(ctxi, content, ephemeral: bool = True, view=None, delete_after: int = 5):
+    warnings.warn("EMBED_DESCRIPTION missing in config. Using default value.")
+if not EMBED_IMAGE_URL or not is_valid_image_url(EMBED_IMAGE_URL):
+    EMBED_IMAGE_URL = "https://fonts.gstatic.com/s/e/notoemoji/latest/1f916/512.webp"
+    warnings.warn(f"EMBED_IMAGE_URL missing in config. Using default value. Make sure it is a URL with one of these extensions: {VALID_IMAGE_EXTENSIONS}")
+if not DEFAULT_TTS_LANGUAGE or DEFAULT_TTS_LANGUAGE not in VALID_TTS_LANGUAGES:
+    DEFAULT_TTS_LANGUAGE = "en"
+    warnings.warn(f"DEFAULT_TTS_LANGUAGE missing in config. Using default value en. Make sure it is one of these: {VALID_TTS_LANGUAGES}")
+try:
+    if isinstance(MAX_QUEUE, bool):
+        raise TypeError
+    MAX_QUEUE = int(MAX_QUEUE)
+    if MAX_QUEUE <= 0:
+        raise ValueError
+except (ValueError, TypeError):
+    MAX_QUEUE = 100
+    warnings.warn("MAX_SONG_QUEUE missing or not a valid integer in config. Using 100 as default value.")
+try:
+    if isinstance(COOLDOWN_PER_UPLOAD, bool):
+        raise TypeError
+    COOLDOWN_PER_UPLOAD = int(COOLDOWN_PER_UPLOAD)
+    if COOLDOWN_PER_UPLOAD <= 0:
+        raise ValueError
+except (ValueError, TypeError):
+    COOLDOWN_PER_UPLOAD = 100
+    warnings.warn("COOLDOWN_PER_UPLOAD_IN_SECONDS missing or not a valid integer in config. Using 100 as default value.")
+try:
+    if isinstance(MESSAGE_CLUTTER_REMOVAL_DELAY, bool):
+        raise TypeError
+    MESSAGE_CLUTTER_REMOVAL_DELAY = int(MESSAGE_CLUTTER_REMOVAL_DELAY)
+    if MESSAGE_CLUTTER_REMOVAL_DELAY <= 0:
+        raise ValueError
+except (ValueError, TypeError):
+    MESSAGE_CLUTTER_REMOVAL_DELAY = 5
+    warnings.warn("MESSAGE_CLUTTER_REMOVAL_DELAY missing or not a valid integer in config. Using 5 as default value.")
+def split_message(text, limit=2000):
+    lines = text.split("\n")
+    chunks = []
+    current = ""
+    for line in lines:
+        if len(current) + len(line) + 1 > limit:
+            chunks.append(current)
+            current = line
+        else:
+            current += ("\n" if current else "") + line
+    if current:
+        chunks.append(current)
+    return chunks
+async def send_msg(ctxi, content, ephemeral: bool = True, view=None, delete_after: int = MESSAGE_CLUTTER_REMOVAL_DELAY):
     msg = None
     if isinstance(ctxi, discord.Interaction):
         if not ctxi.response.is_done():
@@ -68,11 +133,14 @@ async def send_msg(ctxi, content, ephemeral: bool = True, view=None, delete_afte
             msg = await ctxi.send(content, view=view)
         else:
             msg = await ctxi.send(content)
-
         if delete_after > 0:
             await asyncio.sleep(delete_after)
             try:
                 await msg.delete()
+            except:
+                pass
+            try:
+                await ctxi.message.delete()
             except:
                 pass
     return msg
@@ -94,13 +162,17 @@ async def create_control_embed(guild):
         description=EMBED_DESCRIPTION,
         color=0x1DB954
     )
-    embed.set_image(url=EMBED_ANIMATION_URL)
+    embed.set_image(url=EMBED_IMAGE_URL)
     view = View()
     view.add_item(Button(label="⏯ Play/Pause", custom_id="play_pause"))
     view.add_item(Button(label="⏭ Skip", custom_id="skip"))
     view.add_item(Button(label="📃 Queue", custom_id="queue"))
     view.add_item(Button(label="ℹ️ Now Playing", custom_id="nowplaying"))
-    view.add_item(Button(label="🎵 Play Local", custom_id="play_local"))
+    view.add_item(Button(label="🎵 Play Local", custom_id="play_local")) 
+    view.add_item(Button(label=" 📤 Upload Current Song", custom_id="upload_current"))
+    view.add_item(Button(label="📤️ Upload from Queue", custom_id="upload_from_queue"))
+    view.add_item(Button(label="📤 Upload from Local", custom_id="upload_from_local"))
+    view.add_item(Button(label="🗑️ Clear Queue", custom_id="clearqueue"))
     return embed, view
 async def send_control_embed_to_discord_chat(ctxi):
     guild = ctxi.guild
@@ -132,9 +204,9 @@ async def play_next(ctxi):
         queues.setdefault(guild.id, []).insert(0, item)
         return
     try:
-        if item.get("local"):
+        if item.get("local") or (os.path.isfile(url) and MUSIC_FOLDER in url):
             source = discord.FFmpegPCMAudio(url, before_options='-nostdin', options='-vn')
-            now_playings[guild.id] = {"title": title, "url": url}
+            now_playings[guild.id] = {"title": title, "url": url, "local": True, "start_time": time.time(), "position": 0}
         else:
             async def fetch_info():
                 def blocking():
@@ -142,9 +214,10 @@ async def play_next(ctxi):
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         return ydl.extract_info(url, download=False)
                 return await asyncio.to_thread(blocking)
+
             info = await fetch_info()
             audio_url = info.get('url', url)
-            now_playings[guild.id] = {"title": info.get("title", title), "url": url}
+            now_playings[guild.id] = {"title": info.get("title", title), "url": url, "local": False, "start_time": time.time(), "position": 0}
             source = discord.FFmpegPCMAudio(
                 audio_url,
                 before_options='-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
@@ -157,34 +230,60 @@ async def play_next(ctxi):
             except:
                 pass
         voice_client.play(source, after=after_playing)
-    except:
+    except Exception as e:
         queues.setdefault(guild.id, []).insert(0, item)
         await asyncio.sleep(1)
         await play_next(ctxi)
-async def join_logic(ctxi):
+async def join_logic(ctxi, clearqueue: bool = True):
     guild = ctxi.guild
     channel = ctxi_helper(ctxi, "voice_channel")
     if not channel:
         await send_msg(ctxi, "❌ You are not in a voice channel.")
         return
-    if not guild.voice_client:
+    await send_control_embed_to_discord_chat(ctxi)
+    if guild.voice_client:
+        await guild.voice_client.move_to(channel)
+    else:
         await channel.connect()
-        await send_control_embed_to_discord_chat(ctxi)
+    if clearqueue:
+            await clearqueue_logic(ctxi)
 async def play_logic(ctxi, url):
     guild_id = ctxi.guild.id
     if guild_id not in queues:
         queues[guild_id] = []
     try:
-        with yt_dlp.YoutubeDL({'format':'bestaudio','noplaylist':True}) as ydl:
+        ydl_opts = {
+            'format': 'bestaudio',
+            'quiet': True,
+            'extract_flat': True
+        }
+        is_playlist = "playlist" in url
+        if not is_playlist:
+            ydl_opts['extract_flat'] = False
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
+        if 'entries' in info:
+            added_titles = []
+            for entry in info['entries']:
+                if len(queues[guild_id]) >= MAX_QUEUE:
+                    await send_msg(ctxi, f"❌ Queue is full (max {MAX_QUEUE} songs).")
+                    break
+                video_url = f"https://www.youtube.com/watch?v={entry['id']}"
+                queues[guild_id].append({"url": video_url, "title": entry.get("title", "Unknown Title"), "local": False})
+                added_titles.append(entry.get("title", "Unknown Title"))
+            await send_msg(ctxi, f"🎶 Added {len(added_titles)} titles from playlist to the queue.")
+        else:
+            if len(queues[guild_id]) >= MAX_QUEUE:
+                await send_msg(ctxi, f"❌ Queue is full (max {MAX_QUEUE} songs).")
+                return
             title = info.get("title", "Unknown Title")
-    except:
-        title = "Unknown Title"
-    queues[guild_id].append({"url": url, "title": title})
-    await send_msg(ctxi, f"🎶 Added to queue: {title}")
-    vc = ctxi.guild.voice_client
-    if vc and not vc.is_playing():
-        await play_next(ctxi)
+            queues[guild_id].append({"url": url, "title": title, "local": False})
+            await send_msg(ctxi, f"🎶 Added to queue: {title}")
+        vc = ctxi.guild.voice_client
+        if vc and not vc.is_playing():
+            await play_next(ctxi)
+    except Exception as e:
+        await send_msg(ctxi, f"❌ Failed to add video/playlist: {e}")
 async def play_local_logic(ctxi, filename):
     filepath = os.path.join(MUSIC_FOLDER, filename)
     if not os.path.isfile(filepath):
@@ -193,6 +292,9 @@ async def play_local_logic(ctxi, filename):
     guild_id = ctxi.guild.id
     if guild_id not in queues:
         queues[guild_id] = []
+    if len(queues[guild_id]) >= MAX_QUEUE:
+        await send_msg(ctxi, f"❌ Queue is full (max {MAX_QUEUE} songs).")
+        return
     queues[guild_id].append({"url": filepath, "title": filename, "local": True})
     vc = ctxi.guild.voice_client
     if not vc.is_playing():
@@ -208,14 +310,23 @@ async def list_local_files(ctxi):
     view = PaginatedFileSelect(files, ctxi)
     msg = await send_msg(ctxi, "🎵 Select a file to play from the dropdown:", ephemeral=True, view=view, delete_after=0)
     view.message = msg
+class FileSelect(Select):
+    def __init__(self, files, parent_view):
+        options = [
+            SelectOption(label=f[:100], description=f"File {f}"[:100])
+            for f in files
+        ]
+        super().__init__(placeholder="Select a file", options=options)
+        self.parent_view = parent_view
+    async def callback(self, interaction: Interaction):
+        await self.parent_view.select_callback(interaction)
 class PaginatedFileSelect(View):
     def __init__(self, files, ctx):
         super().__init__(timeout=120)
         self.ctx = ctx
         self.files = files
         self.page = 0
-        self.select = Select(placeholder="Select a file to play", options=[])
-        self.select.callback = self.select_callback
+        self.select = FileSelect([], self)
         self.add_item(self.select)
         self.prev_button = Button(label="Previous", style=ButtonStyle.secondary)
         self.prev_button.callback = self.prev_page
@@ -235,9 +346,12 @@ class PaginatedFileSelect(View):
         start = self.page * PAGE_SIZE
         end = start + PAGE_SIZE
         page_files = self.files[start:end]
-        self.select.options = [
-            SelectOption(label=f, description=f"Queue {f}") for f in page_files
-        ]
+        options = []
+        for f in page_files:
+            desc = f"Queue {f}"
+            if len(desc)>100: desc = desc[:97]+"..."
+            options.append(SelectOption(label=f[:100], description=desc))
+        self.select.options = options
         self.prev_button.disabled = self.page == 0
         self.next_button.disabled = end >= len(self.files)
     async def select_callback(self, interaction: Interaction):
@@ -253,16 +367,24 @@ class PaginatedFileSelect(View):
         if self.page > 0:
             self.page -= 1
             self.update_options()
-            await interaction.response.edit_message(view=self)
+            await interaction.followup.edit_message(
+                message_id=interaction.message.id, view=self
+            )
     async def next_page(self, interaction: Interaction):
         if (self.page + 1) * PAGE_SIZE < len(self.files):
             self.page += 1
             self.update_options()
-            await interaction.response.edit_message(view=self)
+            await interaction.followup.edit_message(
+                message_id=interaction.message.id, view=self
+            )
 async def skip_logic(ctxi):
     vc = ctxi.guild.voice_client
+    guild = ctxi.guild
     if vc and vc.is_playing():
         vc.stop()
+        await send_msg(ctxi, "⏭ Skipped current song.")
+    elif guild.id in queues or queues[guild.id]:
+        await play_next(ctxi)
         await send_msg(ctxi, "⏭ Skipped current song.")
 async def pause_logic(ctxi):
     vc = ctxi.guild.voice_client
@@ -276,16 +398,244 @@ async def resume_logic(ctxi):
         await send_msg(ctxi, "⏯ Playback resumed.")
     else:
         await send_msg(ctxi, "❌ Nothing is paused.")
+async def clearqueue_logic(ctxi):
+    try:
+        queues[ctxi.guild.id] = []
+        await send_msg(ctxi, "🗑️ Queue Cleared.")
+    except Exception as e:
+        await send_msg(ctxi, f"❌ Error clearing queue: {e}")
+async def download_logic(ctxi, arg: str = None):
+    guild_id = ctxi.guild.id
+    now = time.time()
+    existing = next((d for d in downloads if d["guild_id"] == guild_id), None)
+    if existing and now - existing.get("last_time", 0) < COOLDOWN_PER_UPLOAD:
+        await send_msg(ctxi, "❌ Downloads can only be used once per minute per guild.")
+        return
+    if not existing:
+        downloads.append({"guild_id": guild_id, "islocal": False, "string": "", "last_time": now})
+    else:
+        existing["last_time"] = now
+    if not arg:
+        np = now_playings.get(guild_id)
+        if np:
+            await send_msg(ctxi, "📤 Trying to upload current song as file.")
+            await upload_current(ctxi)
+            asyncio.get_running_loop().create_task(upload_to_discord_chat(ctxi))
+        else:
+            await send_msg(ctxi, "❌ Nothing is playing.")
+            return
+    elif arg == "queue":
+        view = await list_upload_from_queue(ctxi)
+        if view:
+            await view.wait()
+            asyncio.get_running_loop().create_task(upload_to_discord_chat(ctxi))
+    elif arg == "local":
+        view = await list_upload_from_local(ctxi)
+        if view:
+            await view.wait()
+            asyncio.get_running_loop().create_task(upload_to_discord_chat(ctxi))
+    else:
+        await send_msg(ctxi, "❌ Unrecognized Command.")
+        return
+async def upload_current(ctxi):
+    guild_id = ctxi.guild.id
+    entry = next((d for d in downloads if d["guild_id"] == guild_id), None)
+    if not entry:
+        return
+    np = now_playings.get(guild_id)
+    if not np:
+        await send_msg(ctxi, "❌ Nothing is playing.")
+        return
+    current_url = np["url"]
+    is_local_file = os.path.isfile(current_url) and MUSIC_FOLDER in current_url
 
-# Discord !Prefix Commands
+    if is_local_file:
+        entry["islocal"] = True
+        entry["string"] = os.path.basename(current_url)
+    else:
+        filename_candidates = [f for f in os.listdir(MUSIC_FOLDER) if os.path.splitext(f)[0] in np["title"]]
+        if filename_candidates:
+            entry["islocal"] = True
+            entry["string"] = filename_candidates[0]
+        else:
+            entry["islocal"] = False
+            entry["string"] = current_url
+async def list_upload_from_queue(ctxi):
+    guild_id = ctxi.guild.id
+    queue_items = queues.get(guild_id, [])
+    if not queue_items:
+        await send_msg(ctxi, "❌ Queue empty")
+        return
+    class UploadQueueSelect(PaginatedFileSelect):
+        async def select_callback(self, interaction):
+            idx = interaction.data["values"][0]
+            item = queue_items[int(idx)]
+            entry = next((d for d in downloads if d["guild_id"] == guild_id), None)
+            if entry:
+                entry["islocal"] = False
+                entry["string"] = item["url"]
+            if self.message:
+                try: await self.message.delete()
+                except: pass
+            self.stop()
+    files = [str(i) for i in range(len(queue_items))]
+    view = UploadQueueSelect(files, ctxi)
+    msg = await send_msg(ctxi, "🎵 Select a song from the queue to upload:", ephemeral=True, view=view, delete_after=0)
+    view.message = msg
+    return view
+async def list_upload_from_local(ctxi):
+    guild_id = ctxi.guild.id
+    files = [f for f in os.listdir(MUSIC_FOLDER) if os.path.isfile(os.path.join(MUSIC_FOLDER, f))]
+    if not files:
+        await send_msg(ctxi, "❌ Folder empty")
+        return
+    class UploadLocalSelect(PaginatedFileSelect):
+        async def select_callback(self, interaction):
+            filename = interaction.data["values"][0]
+            entry = next((d for d in downloads if d["guild_id"] == guild_id), None)
+            if entry:
+                entry["islocal"] = True
+                entry["string"] = filename
+            if self.message:
+                try: await self.message.delete()
+                except: pass
+            self.stop()
+    view = UploadLocalSelect(files, ctxi)
+    msg = await send_msg(ctxi, "🎵 Select a local file to upload:", ephemeral=True, view=view, delete_after=0)
+    view.message = msg
+    return view
+async def upload_to_discord_chat(ctxi):
+    guild_id = ctxi.guild.id
+    entry = next((d for d in downloads if d["guild_id"] == guild_id), None)
+    if not entry or not entry["string"]:
+        await send_msg(ctxi, "❌ Upload failed")
+        return
+    if not entry["islocal"]:
+        entry["string"] = await download_to_local(entry["string"])
+        entry["islocal"] = True
+    file_path = os.path.join(MUSIC_FOLDER, entry["string"])
+    if os.path.isfile(file_path):
+        file_size = os.path.getsize(file_path)
+        if file_size < 8 * 1024 * 1024:
+            try:
+                await ctxi.channel.send(file=discord.File(file_path))
+                await send_msg(ctxi, f"✅ Uploaded {entry['string']}", ephemeral=True)
+            except Exception as e:
+                await send_msg(ctxi, f"❌ Upload failed: {e}")
+        else:
+            await send_msg(ctxi, f"❌ File too large for Discord (<8MB): {entry['string']}")
+    else:
+        await send_msg(ctxi, f"❌ File not found: {entry['string']}")
+async def download_to_local(url):
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': os.path.join(MUSIC_FOLDER, '%(title)s.%(ext)s'),
+        'quiet': True
+    }
+    def blocking_download():
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            return ydl.prepare_filename(info)
+    filename = await asyncio.to_thread(blocking_download)
+    return filename
+async def tts_logic(interaction, text, lang=DEFAULT_TTS_LANGUAGE, keepfile=False):
+    guild_id = interaction.guild.id
+    if len(text) > 500:
+        await send_msg(interaction, "❌ TTS string too long (>500 chars).")
+        return
+    vc = interaction.guild.voice_client
+    if not vc:
+        await send_msg(interaction, "❌ Bot not connected to voice channel.")
+        return
+
+    if not lang:
+        lang = DEFAULT_TTS_LANGUAGE
+    if lang not in tts_langs():
+        await send_msg(interaction, f"❌ Unsupported language `{lang}`. Try one of: {', '.join(tts_langs().keys())}")
+        return
+    await send_msg(interaction, "🤖 TTS Enabled. 🔊")
+    snippet = re.sub(r'[^a-zA-Z0-9_-]', '_', text[:10])
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    tts_file = os.path.join(
+        MUSIC_FOLDER,
+        f"tts{lang}_{snippet}_{timestamp}_{interaction.guild.id}.mp3"
+    )
+    loop = asyncio.get_running_loop()
+    def create_tts():
+        tts = gTTS(text=text, lang=lang, slow=False)
+        tts.save(tts_file)
+    await loop.run_in_executor(None, create_tts)
+    original_track = now_playings.get(guild_id)
+    current_track_data = None
+    if original_track:
+        current_track_data = {
+            "title": original_track.get("title"),
+            "url": original_track.get("url"),
+            "local": original_track.get("local"),
+            "position": original_track.get("position", 0)
+        }
+        original_volume = getattr(vc.source, "volume", 0.2)
+    else:
+        original_volume = 0.2
+    if vc.is_playing() or vc.is_paused():
+        if hasattr(vc.source, "volume"):
+            for v in [original_volume * i / 10 for i in range(10, -1, -1)]:
+                vc.source.volume = max(v, 0)
+                await asyncio.sleep(0.1)
+        if vc.is_playing() and original_track:
+            original_track["position"] = original_track.get("position", 0) + time.time() - original_track.get("start_time", time.time())
+            current_track_data["position"] = original_track["position"]
+        vc.stop()
+    done = asyncio.Event()
+    def after_playing(error):
+        done.set()
+    source = FFmpegPCMAudio(tts_file)
+    tts_audio = discord.PCMVolumeTransformer(source, volume=0.2)
+    vc.play(tts_audio, after=after_playing)
+    await done.wait()
+    if not keepfile:
+        try:
+            os.remove(tts_file)
+        except:
+            pass
+    if current_track_data:
+        now_playings[guild_id] = current_track_data
+        try:
+            pos = current_track_data.get("position", 0)
+            if current_track_data.get("local"):
+                filepath = current_track_data["url"]
+                source = FFmpegPCMAudio(filepath, before_options=f"-ss {int(pos)}", options="-vn")
+            else:
+                def fetch_url():
+                    with yt_dlp.YoutubeDL({'format': 'bestaudio/best', 'quiet': True}) as ydl:
+                        info = ydl.extract_info(current_track_data["url"], download=False)
+                        return info.get("url", current_track_data["url"])
+                audio_url = await asyncio.to_thread(fetch_url)
+                source = FFmpegPCMAudio(
+                    audio_url,
+                    before_options=f"-ss {int(pos)} -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin",
+                    options="-vn"
+                )
+            resumed = discord.PCMVolumeTransformer(source, volume=0.2)
+            def after_resumed(error):
+                if error:
+                    print(f"Resumed track error: {error}")
+            vc.play(resumed, after=after_resumed)
+            await asyncio.sleep(0.1)
+            now_playings[guild_id]["start_time"] = time.time()
+            for v in [original_volume * i / 10 for i in range(11)]:
+                resumed.volume = v
+                await asyncio.sleep(0.1)
+        except Exception as e:
+            await send_msg(interaction, f"⚠️ Could not resume track: {e}")
 @bot.command(name="controls")
 async def controls_command(ctx):
     result = await send_control_embed_to_discord_chat(ctx)
     if result is None:
         await send_msg(ctx, "Something went wrong")
 @bot.command(name="join")
-async def join_command(ctx): 
-    await join_logic(ctx)
+async def join_command(ctx, clearqueue: bool = True): 
+    await join_logic(ctx, clearqueue)
 @bot.command(name="play")
 async def play(ctx, url: str): 
     await play_logic(ctx, url)
@@ -301,7 +651,15 @@ async def pause(ctx):
 @bot.command(name="resume") 
 async def resume(ctx): 
     await resume_logic(ctx)
-# Discord /Slash Commands
+@bot.command(name="download")
+async def download_command(ctx, arg: str = None):
+    await download_logic(ctx, arg)
+@bot.command(name="clear")
+async def clearqueue_command(ctx):
+    await clearqueue_logic(ctx)
+@bot.command(name="tts")
+async def tts_command(ctx, text: str, lang: str = None, keepfile: bool = False):
+    await tts_logic(ctx, text, lang, keepfile)
 @tree.command(name="controls", description="Show the music control embed")
 async def controls_slash(interaction: discord.Interaction):
     if not interaction.response.is_done():
@@ -310,12 +668,13 @@ async def controls_slash(interaction: discord.Interaction):
     if result is None:
         await send_msg(interaction, "Something went wrong")
 @tree.command(name="join", description="Bot joins voice channel")
-async def join_slash(interaction: discord.Interaction): 
+@app_commands.describe(clearqueue="Optional: leave empty for clear queue before joining")
+async def join_slash(interaction: discord.Interaction, clearqueue : bool = True): 
     if not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
-    await join_logic(interaction)
+    await join_logic(interaction, clearqueue)
 @tree.command(name="play", description="Play a YouTube video")
-@app_commands.describe(url="YouTube video URL")
+@app_commands.describe(url="YouTube video URL or: 🆕 https://www.youtube.com/playlist?list=LIST_ID")
 async def play_slash(interaction: discord.Interaction, url: str):
     if not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
@@ -340,6 +699,27 @@ async def resume_slash(interaction: discord.Interaction):
     if not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
     await resume_logic(interaction)
+@tree.command(name="download", description="Download the currently playing song or choose from queue/local")
+@app_commands.describe(arg="Optional: leave empty for current song, or 'queue' or 'local'")
+async def download_slash(interaction: discord.Interaction, arg: Optional[str] = None):
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+    await download_logic(interaction, arg)
+@tree.command(name="clearqueue", description="Clears the song queue")
+async def clearqueue_slash(interaction: discord.Interaction):
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+    await clearqueue_logic(interaction)
+@tree.command(name="tts", description="Send a text-to-speech message in voice channel")
+@app_commands.describe(
+    text="The text to speak (max 500 chars)",
+    lang="Optional: ttsmodel 'en' 'de' 'com'",
+    keepfile="True or False"
+)
+async def tts_slash(interaction: discord.Interaction, text: str, lang: Optional[str] = None, keepfile: bool = False):
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+    await tts_logic(interaction, text, lang, keepfile)
 @tree.command(name="__clear_channel__", description="Deletes all messages in this channel",)
 @app_commands.checks.has_permissions(manage_messages=True)
 async def clear_channel(interaction: discord.Interaction):
@@ -351,7 +731,7 @@ async def clear_channel(interaction: discord.Interaction):
         await send_msg(interaction, f"✅ Cleared {len(deleted)} messages.", ephemeral=True)
     except Exception as e:
         await send_msg(interaction, f"❌ Failed to clear messages: {e}", ephemeral=True)
-@bot.event #Handling buttons
+@bot.event
 async def on_interaction(interaction: discord.Interaction):
     custom_id = interaction.data.get("custom_id") if interaction.data else None
     if not custom_id:
@@ -376,27 +756,47 @@ async def on_interaction(interaction: discord.Interaction):
         if vc and vc.is_playing():
             await skip_logic(interaction)
             response_sent = True
+        qlist = queues.get(interaction.guild.id, [])
+        if qlist:
+            await skip_logic(interaction)
+            response_sent = True
         else:
             await send_msg(interaction, "❌ Nothing is playing to skip.", ephemeral=True)
             response_sent = True
     elif custom_id == "queue":
         qlist = queues.get(interaction.guild.id, [])
-        text = "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(qlist)]) or "Queue is empty."
-        await send_msg(interaction, f"📕 Queue:\n{text}", ephemeral=True)
-        response_sent = True
+        if not qlist:
+            await send_msg(interaction, "Queue is empty.", ephemeral=True)
+            return
+        text = "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(qlist)])
+        if len(text) > 1900:
+            text = text[:1900] + "\n… (discord doesn't allow more text...)"
+        await send_msg(interaction, f"📕 Queue:\n{text}", ephemeral=True, delete_after = 0)
         return
     elif custom_id == "nowplaying":
         np = now_playings.get(interaction.guild.id)
         text = np['title'] if np else "Nothing is playing."
-        await send_msg(interaction, f"ℹ️ Now Playing: {text}", ephemeral=True)
+        await send_msg(interaction, f"ℹ️ Now Playing: {text}", ephemeral=True, delete_after = 0)
         response_sent = True
         return
     elif custom_id == "play_local":
         await list_local_files(interaction)
         response_sent = True
+    elif custom_id == "upload_current":
+        await download_logic(interaction, None)
+        response_sent = True
+    elif custom_id == "upload_from_local":
+        await download_logic(interaction, "local")
+        response_sent = True
+    elif custom_id == "upload_from_queue":
+        await download_logic(interaction, "queue")
+        response_sent = True
+    elif custom_id == "clearqueue":
+        await clearqueue_logic(interaction)
+        response_sent = True
     if not response_sent and not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
-@bot.event #Handling Startup
+@bot.event
 async def on_ready():
     await tree.sync()
     print(f"[DEBUG] Logged in as {bot.user}")
