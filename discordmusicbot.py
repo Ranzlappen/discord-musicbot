@@ -7,6 +7,7 @@ import time
 import warnings
 import datetime
 import re
+import random
 from typing import Optional
 from gtts import gTTS
 from discord import FFmpegPCMAudio
@@ -42,6 +43,7 @@ MAX_QUEUE = config.get("MAX_SONG_QUEUE")
 COOLDOWN_PER_UPLOAD = config.get("COOLDOWN_PER_UPLOAD_IN_SECONDS")
 MESSAGE_CLUTTER_REMOVAL_DELAY = config.get("MESSAGE_CLUTTER_REMOVAL_DELAY")
 DEFAULT_TTS_LANGUAGE = config.get("DEFAULT_TTS_LANGUAGE")
+AUTOPLAY = False
 VALID_TTS_LANGUAGES = ("af", "am", "ar", "bg", "bn", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es", "et", "eu", "fi", "fr", "fr-CA", "gl", "gu", "ha", "hi", "hr", "hu", "id", "is", "it", "iw", "ja", "jw", "km", "kn", "ko", "la", "lt", "lv", "ml", "mr", "ms", "my", "ne", "nl", "no", "pa", "pl", "pt", "pt-PT", "ro", "ru", "si", "sk", "sq", "sr", "su", "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "yue", "zh-CN", "zh-TW", "zh")
 PAGE_SIZE = 25 # discord limits this to 25
 def is_valid_image_url(url: str) -> bool:
@@ -166,13 +168,14 @@ async def create_control_embed(guild):
     view = View()
     view.add_item(Button(label="⏯ Play/Pause", custom_id="play_pause"))
     view.add_item(Button(label="⏭ Skip", custom_id="skip"))
+    view.add_item(Button(label="🔀 Autoplay", custom_id="autoplay"))
     view.add_item(Button(label="📃 Queue", custom_id="queue"))
+    view.add_item(Button(label="🗑️ Clear Queue", custom_id="clearqueue"))
     view.add_item(Button(label="ℹ️ Now Playing", custom_id="nowplaying"))
     view.add_item(Button(label="🎵 Play Local", custom_id="play_local")) 
-    view.add_item(Button(label=" 📤 Upload Current Song", custom_id="upload_current"))
+    view.add_item(Button(label="📤 Upload Current Song", custom_id="upload_current"))
     view.add_item(Button(label="📤️ Upload from Queue", custom_id="upload_from_queue"))
     view.add_item(Button(label="📤 Upload from Local", custom_id="upload_from_local"))
-    view.add_item(Button(label="🗑️ Clear Queue", custom_id="clearqueue"))
     return embed, view
 async def send_control_embed_to_discord_chat(ctxi):
     guild = ctxi.guild
@@ -193,6 +196,11 @@ async def send_control_embed_to_discord_chat(ctxi):
     return sent_msg
 async def play_next(ctxi):
     guild = ctxi.guild
+    if AUTOPLAY:
+        local_files = [f for f in os.listdir(MUSIC_FOLDER) if os.path.isfile(os.path.join(MUSIC_FOLDER, f))]
+        if local_files:
+            random_file = random.choice(local_files)
+            queues.setdefault(guild.id, []).append({"url": os.path.join(MUSIC_FOLDER, random_file), "title": random_file, "local": True})
     if guild.id not in queues or not queues[guild.id]:
         now_playings[guild.id] = None
         return
@@ -379,13 +387,15 @@ class PaginatedFileSelect(View):
             )
 async def skip_logic(ctxi):
     vc = ctxi.guild.voice_client
-    guild = ctxi.guild
-    if vc and vc.is_playing():
+    guild_id = ctxi.guild.id
+    if vc and (vc.is_playing() or vc.is_paused()):
         vc.stop()
         await send_msg(ctxi, "⏭ Skipped current song.")
-    elif guild.id in queues or queues[guild.id]:
+    elif guild_id in queues and queues[guild_id]:
         await play_next(ctxi)
         await send_msg(ctxi, "⏭ Skipped current song.")
+    else:
+        await send_msg(ctxi, "❌ Nothing is playing to skip.")
 async def pause_logic(ctxi):
     vc = ctxi.guild.voice_client
     if vc and vc.is_playing():
@@ -467,18 +477,31 @@ async def list_upload_from_queue(ctxi):
         await send_msg(ctxi, "❌ Queue empty")
         return
     class UploadQueueSelect(PaginatedFileSelect):
+        def update_options(self):
+            start = self.page * PAGE_SIZE
+            end = start + PAGE_SIZE
+            page_items = queue_items[start:end]
+            options = []
+            for idx, item in enumerate(page_items, start=start):
+                title = item.get("title", f"Song {idx}")
+                options.append(SelectOption(label=title[:100], value=str(idx)))
+            self.select.options = options
+            self.prev_button.disabled = self.page == 0
+            self.next_button.disabled = end >= len(queue_items)
         async def select_callback(self, interaction):
-            idx = interaction.data["values"][0]
-            item = queue_items[int(idx)]
+            idx = int(interaction.data["values"][0])
+            item = queue_items[idx]
             entry = next((d for d in downloads if d["guild_id"] == guild_id), None)
             if entry:
                 entry["islocal"] = False
                 entry["string"] = item["url"]
             if self.message:
-                try: await self.message.delete()
-                except: pass
+                try:
+                    await self.message.delete()
+                except:
+                    pass
             self.stop()
-    files = [str(i) for i in range(len(queue_items))]
+    files = [f"{item.get('title', 'Unknown')}" for item in queue_items]
     view = UploadQueueSelect(files, ctxi)
     msg = await send_msg(ctxi, "🎵 Select a song from the queue to upload:", ephemeral=True, view=view, delete_after=0)
     view.message = msg
@@ -536,8 +559,8 @@ async def download_to_local(url):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             return ydl.prepare_filename(info)
-    filename = await asyncio.to_thread(blocking_download)
-    return filename
+    full_path = await asyncio.to_thread(blocking_download)
+    return os.path.basename(full_path)
 async def tts_logic(interaction, text, lang=DEFAULT_TTS_LANGUAGE, keepfile=False):
     guild_id = interaction.guild.id
     if len(text) > 500:
@@ -628,6 +651,17 @@ async def tts_logic(interaction, text, lang=DEFAULT_TTS_LANGUAGE, keepfile=False
                 await asyncio.sleep(0.1)
         except Exception as e:
             await send_msg(interaction, f"⚠️ Could not resume track: {e}")
+async def autoplay_logic(ctxi):
+    global AUTOPLAY
+    if AUTOPLAY:
+        AUTOPLAY = False
+        await send_msg(ctxi, "😴 Autoplay stopping after current queue.")
+    else:
+        AUTOPLAY = True
+        await send_msg(ctxi, "🔀 Autoplay Activated.")
+        vc = ctxi.guild.voice_client
+        if vc and not vc.is_playing():
+            await play_next(ctxi)
 @bot.command(name="controls")
 async def controls_command(ctx):
     result = await send_control_embed_to_discord_chat(ctx)
@@ -660,6 +694,9 @@ async def clearqueue_command(ctx):
 @bot.command(name="tts")
 async def tts_command(ctx, text: str, lang: str = None, keepfile: bool = False):
     await tts_logic(ctx, text, lang, keepfile)
+@bot.command(name="autoplay")
+async def autoplay_command(ctx):
+    await autoplay_logic(ctx)
 @tree.command(name="controls", description="Show the music control embed")
 async def controls_slash(interaction: discord.Interaction):
     if not interaction.response.is_done():
@@ -720,6 +757,11 @@ async def tts_slash(interaction: discord.Interaction, text: str, lang: Optional[
     if not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
     await tts_logic(interaction, text, lang, keepfile)
+@tree.command(name="autoplay", description="Autoplay random from local") 
+async def autoplay_slash(interaction: discord.Interaction): 
+    if not interaction.response.is_done():
+        await interaction.response.defer(ephemeral=True)
+    await autoplay_logic(interaction)
 @tree.command(name="__clear_channel__", description="Deletes all messages in this channel",)
 @app_commands.checks.has_permissions(manage_messages=True)
 async def clear_channel(interaction: discord.Interaction):
@@ -760,9 +802,6 @@ async def on_interaction(interaction: discord.Interaction):
         if qlist:
             await skip_logic(interaction)
             response_sent = True
-        else:
-            await send_msg(interaction, "❌ Nothing is playing to skip.", ephemeral=True)
-            response_sent = True
     elif custom_id == "queue":
         qlist = queues.get(interaction.guild.id, [])
         if not qlist:
@@ -793,6 +832,9 @@ async def on_interaction(interaction: discord.Interaction):
         response_sent = True
     elif custom_id == "clearqueue":
         await clearqueue_logic(interaction)
+        response_sent = True
+    elif custom_id == "autoplay":
+        await autoplay_logic(interaction)
         response_sent = True
     if not response_sent and not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
