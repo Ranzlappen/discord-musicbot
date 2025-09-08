@@ -110,6 +110,12 @@ Alternatively you can create a name.bat file that contains the command "python d
   - `text` (max 500 chars) – text to speak  
   - `lang` – optional, TTS model: `'en'`, `'de'`, `'com'`  
   - `keepfile` – `True` or `False`
+<details>
+	<summary>All languages for lang parameter</summary>
+	
+	af, am, ar, bg, bn, bs, ca, cs, cy, da, de, el, en, es, et, eu, fi, fr, fr-CA, gl, gu, ha, hi, hr, hu, id, is, it, iw, ja, jw, km, kn, ko, la, lt, lv, ml, mr, ms, my, ne, nl, no, pa, pl, pt, pt-PT, ro, ru, si, sk, sq, sr, su, sv, sw, ta, te, th, tl, tr, uk, ur, vi, yue, zh-CN, zh-TW, zh
+</details>
+
 
 ### Administration
 - **`/__clear_channel__`** - Deletes all messages in the current channel.  
