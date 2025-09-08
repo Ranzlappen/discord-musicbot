@@ -1,6 +1,9 @@
 # discord-musicbot
 lightweight discord music bot for youtube and local music
 
+<img width="921" height="553" alt="image" src="https://github.com/user-attachments/assets/67482351-269a-45eb-9c87-4f7b588c2d4e" />
+
+
 ⚠️ Attention! Using this bot extremely heavily (multiple youtube calls per second) might not be a good idea, since YouTube does not like bots, making too many calls might get your youtube account suspended. 
 Using this privately shouldn't be a problem at all though. 
 Use this at your own risk.
@@ -11,11 +14,20 @@ Use this at your own risk.
 
 # Getting Started / Installation for Windows:
 
-1. ⚠️Required: Download and Install https://ffmpeg.org/
+## 1. ⚠️Required: Download and Install https://ffmpeg.org/
 
-2. on windows search for "Environment Variables" or "Edit the system environment variables," click "Environment Variables," select the "Path" variable under "System Variables," click "Edit," and then click "New". Then add this new path "C:\your\install\path\ffmpeg-...\bin" at the bottom
+## 2. on windows:
+- 1. search for "Environment Variables" or "Edit the system environment variables", 
+- 2. click "Environment Variables", 
+- 3. select the "Path" variable under "System Variables",
+- 4. click "Edit," 
+- 5. and then click "New". 
+- 6. Then add your new path "C:\your\install\path\ffmpeg-...full_build\bin"
+- 7. finally hit OK on all 3 popups.
 
-3. Required file Structure for this Project
+<img width="1842" height="898" alt="image" src="https://github.com/user-attachments/assets/2788cef1-d37c-41d4-b202-8222cf3c4866" />
+
+## 3. Required file Structure for this Project
 ```
 └── C:\your\path\your-folder
     ├── discordmusicbot.py
@@ -25,44 +37,47 @@ Use this at your own risk.
         ├── song2.mp3
         └── ...
 ```
-4. Install the following dependencies with CMD.exe, Download Python from python.org, During installation, check ✅ “Add Python to PATH.” This will also install pip by default.
-    (Indepth Guide: https://packaging.python.org/en/latest/tutorials/installing-packages/)
+## 4. Install the following dependencies with CMD.exe, Download Python from python.org, During installation, check ✅ “Add Python to PATH.” This will also install pip by default.
+
+(Indepth Guide: https://packaging.python.org/en/latest/tutorials/installing-packages/)
+
 ```
-python -m ensurepip --upgrade //run this command if python is installed but pip isn't
-pip --version //checks if pip is installed
-pip install -U discord.py yt-dlp
+python -m ensurepip --upgrade
+```
+```
+pip --version
+```
+```
+pip install -U discord.py yt-dlp gTTS
 ```
 
-5. Create an Application here https://discord.com/developers/applications/
+## 5. Create an Application here https://discord.com/developers/applications/
 
-6. on that Page go to -> YOUR APPLICATION -> Bot -> RESET TOKEN, copy this token and paste it into the config.json File
+## 6. on that Page go to -> YOUR APPLICATION -> Bot -> RESET TOKEN, copy this token and paste it into the config.json File. (⚠️NEVER COMMIT A CONFIG.JSON with YOUR TOKEN to github, and in general don't share your token)
 ```
 {
-	"BOT_TOKEN": "YOUR TOKEN GOES HERE",
-	...
-	...
+	"BOT_TOKEN": "YOUR TOKEN GOES HERE"
 }
 ```
 
-7. on that Page go to -> Installation
+## 7. on that Page go to -> Installation
    - Installation Contexts: Guild Install
    - Default Install Settings -> Scopes: applications.commands, bot
-   - Default Install Settings -> Permissions: Connect, Embed Links, Manage Messages, Send Messages, Speak, Use Embedded Activities, Use External Apps, Use Slash Commands, View Channels (or if you are lazy Admin)
+   - Default Install Settings -> Permissions: Connect, Embed Links, Manage Messages, Send Messages, Speak, Use Embedded Activities, Use External Apps, Use Slash Commands, View Channels (If you’re testing, Admin is easiest, but for production, use least privileges.)
 
-8. in Installations -> Install Link -> Discord Provided Link -> Open the Link in your browser -> Add the Bot to one of your Servers.
+## 8. in Installations -> Install Link -> Discord Provided Link -> Open the Link in your browser -> Add the Bot to one of your Servers.
 
 # Using the Bot
 
-1. Start the Bot Client by opening CMD, navigate to your root folder of: discordmusicbot.py and run this command
+## 1. Start the Bot Client by opening CMD, navigate to your root folder of: discordmusicbot.py and run this command
 ```
 python discordmusicbot.py
-Alternatively if you want an .exe use
-pyinstaller --noconsole --onefile discordmusicbot.py
 ```
-3. Once the cmd runs without errors, your bot should appear as Online in your Server. ⚠️ If this command doesn't work go back up, to: "Install 4"
+Alternatively you can create a name.bat file that contains the command "python discordmusicbot2.py"
 
-4. Commands are the following and can be used with either ! or / as prefix:
-# Bot Slash Commands
+## 2. Once the cmd runs without errors, your bot should appear as Online in your Server. ⚠️ If this command doesn't work go back up, to: [Install 4](https://github.com/Ranzlappen/discord-musicbot/edit/main/README.md#4-install-the-following-dependencies-with-cmdexe-download-python-from-pythonorg-during-installation-check--add-python-to-path-this-will-also-install-pip-by-default)
+
+## 3. Commands are the following and can be used with either ! or / as prefix:
 
 ### Music Controls
 - **`/controls`** - Show the music control embed.
@@ -105,7 +120,17 @@ pyinstaller --noconsole --onefile discordmusicbot.py
 <details>
 	
 <summary>changelog</summary>
-	
+
+### Main Commit 3
+
+-New Command /autoplay - toggle - plays random local files if the queue is empty 
+
+-attempt at fixing skip logic (needs further testing, but shouldn't double skip anymore)
+
+-download_to_local now returns only the filename to avoid doubling the folder path
+
+-upload_from_queue dropdown now shows song titles instead of indices.
+
 ### Main Commit 2
 	
 - New Command: Clear Queue
