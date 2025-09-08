@@ -6,7 +6,8 @@ Using this privately shouldn't be a problem at all though.
 Use this at your own risk.
 
 <details>
-<summary> I HAVE READ THE ABOVE AND KNOW THE RISK.</summary>
+	
+<summary>I HAVE READ THE ABOVE AND KNOW THE RISK.</summary>
 
 # Getting Started / Installation for Windows:
 
@@ -38,9 +39,8 @@ pip install -U discord.py yt-dlp
 ```
 {
 	"BOT_TOKEN": "YOUR TOKEN GOES HERE",
-	"EMBED_TITLE": "Music Controls",
-	"EMBED_DESCRIPTION": "Use the buttons below to control music.",
-	"EMBED_ANIMATION_URL": "https://fonts.gstatic.com/s/e/notoemoji/latest/1f916/512.webp"
+	...
+	...
 }
 ```
 
@@ -62,13 +62,70 @@ pyinstaller --noconsole --onefile discordmusicbot.py
 3. Once the cmd runs without errors, your bot should appear as Online in your Server. ⚠️ If this command doesn't work go back up, to: "Install 4"
 
 4. Commands are the following and can be used with either ! or / as prefix:
-```
-/join - connects the bot the Users current Voice Channel
-/controls - shows some buttons. one shows current song, one shows the song queue
-/local - shows the user a selection of files in your root/music folder, this folder will be created automatically if it doesnt exist next to your discordmusicbot.py, selecting a song will append it to the playback queue
-/pause - pauses current track
-/play <url> - appends the song in the url to the playback queue
-/resume - resumes current track
-/skip - skips corrent track
-```
+# Bot Slash Commands
+
+### Music Controls
+- **`/controls`** - Show the music control embed.
+
+### Voice Channel
+- **`/join [clearqueue]`** - Bot joins your voice channel.  
+  Optional parameter: `clearqueue` (default: `True`) – clears the queue before joining.
+
+### Playback
+- **`/play <url>`** - Play a YouTube video or playlist.  
+  Parameter: `url` – YouTube video URL or playlist URL (`https://www.youtube.com/playlist?list=LIST_ID`).
+
+- **`/local`** - List all local music files available.
+
+- **`/skip`** - Skip the current song.
+
+- **`/pause`** - Pause playback.
+
+- **`/resume`** - Resume playback.
+
+- **`/clearqueue`** - Clears the song queue.
+
+### Downloads
+- **`/download [arg]`** - Download the currently playing song or choose from queue/local.  
+  Optional parameter: `arg` – leave empty for current song, or `'queue'` / `'local'`.
+
+### Text-to-Speech
+- **`/tts <text> [lang] [keepfile]`** - Send a text-to-speech message in the voice channel.  
+  Parameters:  
+  - `text` (max 500 chars) – text to speak  
+  - `lang` – optional, TTS model: `'en'`, `'de'`, `'com'`  
+  - `keepfile` – `True` or `False`
+
+### Administration
+- **`/__clear_channel__`** - Deletes all messages in the current channel.  
+  Requires **Manage Messages** permission.
+
+</details>
+
+<details>
+	
+<summary>changelog</summary>
+	
+### Main Commit 2
+	
+- New Command: Clear Queue
+
+- New Command: Upload file to discord chat (from queue/from local/from currently playing youtube)
+
+- New Command: TTS that pauses playback of music and can optionally be downloaded as sound file, optional parameter for language, default language can be set in config
+
+- play command now accepts youtube playlists in the form of: https://www.youtube.com/playlist?list=YOUR_LIST_ID
+
+- new config data like max queue size, cooldown for uploads, default tts language, message clutter removal delay 
+
+- some config validations to reduce errors
+
+- some minor fixes/improvements/edge cases
+
+- accounted for some discord limitations like 2000char limit in messages, 100char limit in dropdown options, 25option limit in dropdowns
+
+### Main Commit 1
+
+- Initial Version.
+
 </details>
