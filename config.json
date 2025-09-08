@@ -2,6 +2,9 @@
 	"BOT_TOKEN": "YOUR BOT TOKEN",
 	"EMBED_TITLE": "Music Controls",
 	"EMBED_DESCRIPTION": "Use the buttons below to control music.",
-	"EMBED_ANIMATION_URL": "https://fonts.gstatic.com/s/e/notoemoji/latest/1f916/512.webp"
-	
+	"EMBED_IMAGE_URL": "https://fonts.gstatic.com/s/e/notoemoji/latest/1f916/512.webp",
+	"COOLDOWN_PER_UPLOAD_IN_SECONDS": 10,
+	"MAX_SONG_QUEUE": 100,
+	"MESSAGE_CLUTTER_REMOVAL_DELAY": 5,
+	"DEFAULT_TTS_LANGUAGE": "en"
 }
