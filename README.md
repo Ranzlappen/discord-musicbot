@@ -123,13 +123,13 @@ Alternatively you can create a name.bat file that contains the command "python d
 
 ### Main Commit 3
 
--New Command /autoplay - toggle - plays random local files if the queue is empty 
+- New Command /autoplay - toggle - plays random local files if the queue is empty 
 
--attempt at fixing skip logic (needs further testing, but shouldn't double skip anymore)
+- attempt at fixing skip logic (needs further testing, but shouldn't double skip anymore)
 
--download_to_local now returns only the filename to avoid doubling the folder path
+- download_to_local now returns only the filename to avoid doubling the folder path
 
--upload_from_queue dropdown now shows song titles instead of indices.
+- upload_from_queue dropdown now shows song titles instead of indices.
 
 ### Main Commit 2
 	
