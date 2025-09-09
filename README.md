@@ -12,6 +12,13 @@ Use this at your own risk.
 	
 <summary>I HAVE READ THE ABOVE AND KNOW THE RISK.</summary>
 
+
+
+first experimental pre-release https://github.com/Ranzlappen/discord-musicbot/releases/tag/pre
+
+
+if you use this, you can skip part 1,2,3,4 of the installation, and 1,2 of the use guide.
+
 # Getting Started / Installation for Windows:
 
 ## 1. ⚠️Required: Download and Install https://ffmpeg.org/
@@ -54,6 +61,9 @@ pip install -U discord.py yt-dlp gTTS
 ## 5. Create an Application here https://discord.com/developers/applications/
 
 ## 6. on that Page go to -> YOUR APPLICATION -> Bot -> RESET TOKEN, copy this token and paste it into the config.json File. (⚠️NEVER COMMIT A CONFIG.JSON with YOUR TOKEN to github, and in general don't share your token)
+
+(right now the .exe will crash if there is no valid bot token in the config)
+
 ```
 {
 	"BOT_TOKEN": "YOUR TOKEN GOES HERE"
@@ -76,6 +86,8 @@ python discordmusicbot.py
 Alternatively you can create a name.bat file that contains the command "python discordmusicbot2.py"
 
 ## 2. Once the cmd runs without errors, your bot should appear as Online in your Server. ⚠️ If this command doesn't work go back up, to: [Install 4](https://github.com/Ranzlappen/discord-musicbot/edit/main/README.md#4-install-the-following-dependencies-with-cmdexe-download-python-from-pythonorg-during-installation-check--add-python-to-path-this-will-also-install-pip-by-default)
+
+## 2.5 if you are using the 7z file, just unpack it and launch the .exe (note that the program will instantly crash if no valid bot token is inside of the config)
 
 ## 3. Commands are the following and can be used with either ! or / as prefix:
 
