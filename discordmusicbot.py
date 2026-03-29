@@ -43,9 +43,9 @@ MAX_QUEUE = config.get("MAX_SONG_QUEUE")
 COOLDOWN_PER_UPLOAD = config.get("COOLDOWN_PER_UPLOAD_IN_SECONDS")
 MESSAGE_CLUTTER_REMOVAL_DELAY = config.get("MESSAGE_CLUTTER_REMOVAL_DELAY")
 DEFAULT_TTS_LANGUAGE = config.get("DEFAULT_TTS_LANGUAGE")
-AUTOPLAY = False
+autoplay_guilds = set()
 VALID_TTS_LANGUAGES = ("af", "am", "ar", "bg", "bn", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es", "et", "eu", "fi", "fr", "fr-CA", "gl", "gu", "ha", "hi", "hr", "hu", "id", "is", "it", "iw", "ja", "jw", "km", "kn", "ko", "la", "lt", "lv", "ml", "mr", "ms", "my", "ne", "nl", "no", "pa", "pl", "pt", "pt-PT", "ro", "ru", "si", "sk", "sq", "sr", "su", "sv", "sw", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi", "yue", "zh-CN", "zh-TW", "zh")
-PAGE_SIZE = 25 # discord limits this to 25
+PAGE_SIZE = 25
 def is_valid_image_url(url: str) -> bool:
     from urllib.parse import urlparse
     try:
@@ -85,8 +85,8 @@ try:
     if COOLDOWN_PER_UPLOAD <= 0:
         raise ValueError
 except (ValueError, TypeError):
-    COOLDOWN_PER_UPLOAD = 100
-    warnings.warn("COOLDOWN_PER_UPLOAD_IN_SECONDS missing or not a valid integer in config. Using 100 as default value.")
+    COOLDOWN_PER_UPLOAD = 10
+    warnings.warn("COOLDOWN_PER_UPLOAD_IN_SECONDS missing or not a valid integer in config. Using 10 as default value.")
 try:
     if isinstance(MESSAGE_CLUTTER_REMOVAL_DELAY, bool):
         raise TypeError
@@ -159,23 +159,33 @@ def ctxi_helper(ctxi, argument: str):
         return member.voice.channel if member and member.voice else None
     raise ValueError(f"Unknown argument: {argument}")
 async def create_control_embed(guild):
+    queue_count = len(queues.get(guild.id, []))
+    desc = EMBED_DESCRIPTION
+    if queue_count > 0:
+        desc += f" | {queue_count} song{'s' if queue_count != 1 else ''} queued"
     embed = discord.Embed(
         title=EMBED_TITLE,
-        description=EMBED_DESCRIPTION,
+        description=desc,
         color=0x1DB954
     )
     embed.set_image(url=EMBED_IMAGE_URL)
-    view = View()
-    view.add_item(Button(label="⏯ Play/Pause", custom_id="play_pause"))
-    view.add_item(Button(label="⏭ Skip", custom_id="skip"))
-    view.add_item(Button(label="🔀 Autoplay", custom_id="autoplay"))
-    view.add_item(Button(label="📃 Queue", custom_id="queue"))
-    view.add_item(Button(label="🗑️ Clear Queue", custom_id="clearqueue"))
-    view.add_item(Button(label="ℹ️ Now Playing", custom_id="nowplaying"))
-    view.add_item(Button(label="🎵 Play Local", custom_id="play_local")) 
-    view.add_item(Button(label="📤 Upload Current Song", custom_id="upload_current"))
-    view.add_item(Button(label="📤️ Upload from Queue", custom_id="upload_from_queue"))
-    view.add_item(Button(label="📤 Upload from Local", custom_id="upload_from_local"))
+    np = now_playings.get(guild.id)
+    if np:
+        embed.set_footer(text=f"Now Playing: {np['title']}")
+    autoplay_label = "🔀 Autoplay ON" if guild.id in autoplay_guilds else "🔀 Autoplay OFF"
+    view = View(timeout=None)
+    view.add_item(Button(label="⏯ Play/Pause", custom_id="play_pause", style=ButtonStyle.success))
+    view.add_item(Button(label="⏭ Skip", custom_id="skip", style=ButtonStyle.primary))
+    view.add_item(Button(label=autoplay_label, custom_id="autoplay", style=ButtonStyle.success))
+    view.add_item(Button(label="📃 Queue", custom_id="queue", style=ButtonStyle.primary))
+    view.add_item(Button(label="🗑️ Clear Queue", custom_id="clearqueue", style=ButtonStyle.danger))
+    view.add_item(Button(label="ℹ️ Now Playing", custom_id="nowplaying", style=ButtonStyle.primary))
+    view.add_item(Button(label="🎵 Play Local", custom_id="play_local", style=ButtonStyle.secondary))
+    view.add_item(Button(label="🔉", custom_id="vol_down", style=ButtonStyle.secondary))
+    view.add_item(Button(label="🔊", custom_id="vol_up", style=ButtonStyle.secondary))
+    view.add_item(Button(label="📤 Upload Current", custom_id="upload_current", style=ButtonStyle.secondary))
+    view.add_item(Button(label="📤 From Queue", custom_id="upload_from_queue", style=ButtonStyle.secondary))
+    view.add_item(Button(label="📤 From Local", custom_id="upload_from_local", style=ButtonStyle.secondary))
     return embed, view
 async def send_control_embed_to_discord_chat(ctxi):
     guild = ctxi.guild
@@ -196,7 +206,7 @@ async def send_control_embed_to_discord_chat(ctxi):
     return sent_msg
 async def play_next(ctxi):
     guild = ctxi.guild
-    if AUTOPLAY:
+    if guild.id in autoplay_guilds:
         local_files = [f for f in os.listdir(MUSIC_FOLDER) if os.path.isfile(os.path.join(MUSIC_FOLDER, f))]
         if local_files:
             random_file = random.choice(local_files)
@@ -268,8 +278,10 @@ async def play_logic(ctxi, url):
         is_playlist = "playlist" in url
         if not is_playlist:
             ydl_opts['extract_flat'] = False
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+        def _extract():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                return ydl.extract_info(url, download=False)
+        info = await asyncio.to_thread(_extract)
         if 'entries' in info:
             added_titles = []
             for entry in info['entries']:
@@ -305,6 +317,9 @@ async def play_local_logic(ctxi, filename):
         return
     queues[guild_id].append({"url": filepath, "title": filename, "local": True})
     vc = ctxi.guild.voice_client
+    if not vc:
+        await send_msg(ctxi, "❌ Bot is not connected to a voice channel.")
+        return
     if not vc.is_playing():
         await play_next(ctxi)
 async def list_local_files(ctxi):
@@ -372,6 +387,7 @@ class PaginatedFileSelect(View):
                 pass
         self.stop()
     async def prev_page(self, interaction: Interaction):
+        await interaction.response.defer()
         if self.page > 0:
             self.page -= 1
             self.update_options()
@@ -379,6 +395,7 @@ class PaginatedFileSelect(View):
                 message_id=interaction.message.id, view=self
             )
     async def next_page(self, interaction: Interaction):
+        await interaction.response.defer()
         if (self.page + 1) * PAGE_SIZE < len(self.files):
             self.page += 1
             self.update_options()
@@ -410,8 +427,9 @@ async def resume_logic(ctxi):
         await send_msg(ctxi, "❌ Nothing is paused.")
 async def clearqueue_logic(ctxi):
     try:
+        count = len(queues.get(ctxi.guild.id, []))
         queues[ctxi.guild.id] = []
-        await send_msg(ctxi, "🗑️ Queue Cleared.")
+        await send_msg(ctxi, f"🗑️ Cleared {count} song{'s' if count != 1 else ''}.")
     except Exception as e:
         await send_msg(ctxi, f"❌ Error clearing queue: {e}")
 async def download_logic(ctxi, arg: str = None):
@@ -419,7 +437,7 @@ async def download_logic(ctxi, arg: str = None):
     now = time.time()
     existing = next((d for d in downloads if d["guild_id"] == guild_id), None)
     if existing and now - existing.get("last_time", 0) < COOLDOWN_PER_UPLOAD:
-        await send_msg(ctxi, "❌ Downloads can only be used once per minute per guild.")
+        await send_msg(ctxi, f"❌ Downloads can only be used once every {COOLDOWN_PER_UPLOAD}s per guild.")
         return
     if not existing:
         downloads.append({"guild_id": guild_id, "islocal": False, "string": "", "last_time": now})
@@ -641,8 +659,7 @@ async def tts_logic(interaction, text, lang=DEFAULT_TTS_LANGUAGE, keepfile=False
                 )
             resumed = discord.PCMVolumeTransformer(source, volume=0.2)
             def after_resumed(error):
-                if error:
-                    print(f"Resumed track error: {error}")
+                pass
             vc.play(resumed, after=after_resumed)
             await asyncio.sleep(0.1)
             now_playings[guild_id]["start_time"] = time.time()
@@ -652,12 +669,12 @@ async def tts_logic(interaction, text, lang=DEFAULT_TTS_LANGUAGE, keepfile=False
         except Exception as e:
             await send_msg(interaction, f"⚠️ Could not resume track: {e}")
 async def autoplay_logic(ctxi):
-    global AUTOPLAY
-    if AUTOPLAY:
-        AUTOPLAY = False
+    guild_id = ctxi.guild.id
+    if guild_id in autoplay_guilds:
+        autoplay_guilds.discard(guild_id)
         await send_msg(ctxi, "😴 Autoplay stopping after current queue.")
     else:
-        AUTOPLAY = True
+        autoplay_guilds.add(guild_id)
         await send_msg(ctxi, "🔀 Autoplay Activated.")
         vc = ctxi.guild.voice_client
         if vc and not vc.is_playing():
@@ -795,27 +812,38 @@ async def on_interaction(interaction: discord.Interaction):
             await send_msg(interaction, "❌ Not connected to a voice channel.", ephemeral=True)
             response_sent = True
     elif custom_id == "skip":
-        if vc and vc.is_playing():
+        if vc and (vc.is_playing() or vc.is_paused()):
             await skip_logic(interaction)
             response_sent = True
-        qlist = queues.get(interaction.guild.id, [])
-        if qlist:
+        elif queues.get(interaction.guild.id, []):
             await skip_logic(interaction)
             response_sent = True
     elif custom_id == "queue":
         qlist = queues.get(interaction.guild.id, [])
+        np = now_playings.get(interaction.guild.id)
+        header = ""
+        if np:
+            header = f"▶ Now: {np['title']}\n\n"
         if not qlist:
-            await send_msg(interaction, "Queue is empty.", ephemeral=True)
+            if header:
+                await send_msg(interaction, f"📕 Queue:\n{header}(queue empty)", ephemeral=True, delete_after=0)
+            else:
+                await send_msg(interaction, "Queue is empty.", ephemeral=True)
             return
-        text = "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(qlist)])
+        text = header + "\n".join([f"{i+1}. {item['title']}" for i, item in enumerate(qlist)])
         if len(text) > 1900:
             text = text[:1900] + "\n… (discord doesn't allow more text...)"
-        await send_msg(interaction, f"📕 Queue:\n{text}", ephemeral=True, delete_after = 0)
+        await send_msg(interaction, f"📕 Queue:\n{text}", ephemeral=True, delete_after=0)
         return
     elif custom_id == "nowplaying":
         np = now_playings.get(interaction.guild.id)
-        text = np['title'] if np else "Nothing is playing."
-        await send_msg(interaction, f"ℹ️ Now Playing: {text}", ephemeral=True, delete_after = 0)
+        if np:
+            elapsed = int(time.time() - np.get("start_time", time.time()))
+            mins, secs = divmod(elapsed, 60)
+            text = f"{np['title']} ({mins}:{secs:02d} elapsed)"
+        else:
+            text = "Nothing is playing."
+        await send_msg(interaction, f"ℹ️ Now Playing: {text}", ephemeral=True, delete_after=0)
         response_sent = True
         return
     elif custom_id == "play_local":
@@ -836,6 +864,20 @@ async def on_interaction(interaction: discord.Interaction):
     elif custom_id == "autoplay":
         await autoplay_logic(interaction)
         response_sent = True
+    elif custom_id == "vol_down":
+        if vc and vc.source and hasattr(vc.source, "volume"):
+            vc.source.volume = max(0.0, vc.source.volume - 0.05)
+            await send_msg(interaction, f"🔉 Volume: {int(vc.source.volume * 100)}%", ephemeral=True)
+        else:
+            await send_msg(interaction, "❌ Nothing is playing.", ephemeral=True)
+        response_sent = True
+    elif custom_id == "vol_up":
+        if vc and vc.source and hasattr(vc.source, "volume"):
+            vc.source.volume = min(1.0, vc.source.volume + 0.05)
+            await send_msg(interaction, f"🔊 Volume: {int(vc.source.volume * 100)}%", ephemeral=True)
+        else:
+            await send_msg(interaction, "❌ Nothing is playing.", ephemeral=True)
+        response_sent = True
     if not response_sent and not interaction.response.is_done():
         await interaction.response.defer(ephemeral=True)
 @bot.event
@@ -843,12 +885,9 @@ async def on_ready():
     await tree.sync()
     print(f"[DEBUG] Logged in as {bot.user}")
     for guild in bot.guilds:
-        for channel in guild.voice_channels:
-            for member in channel.members:
-                if member.id == bot.user.id and not guild.voice_client:
-                    try:
-                        vc = await channel.connect()
-                        await member.disconnect(force=True)
-                    except:
-                        pass
+        if guild.voice_client:
+            try:
+                await guild.voice_client.disconnect(force=True)
+            except:
+                pass
 bot.run(BOT_TOKEN)
