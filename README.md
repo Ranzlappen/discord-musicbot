@@ -92,14 +92,14 @@ Alternatively you can create a name.bat file that contains the command "python d
 ## 3. Commands are the following and can be used with either ! or / as prefix:
 
 ### Music Controls
-- **`/controls`** - Show the music control embed.
+- **`/controls`** - Show the music control embed with color-coded buttons, now-playing footer, and queue count.
 
 ### Voice Channel
-- **`/join [clearqueue]`** - Bot joins your voice channel.  
+- **`/join [clearqueue]`** - Bot joins your voice channel.
   Optional parameter: `clearqueue` (default: `True`) – clears the queue before joining.
 
 ### Playback
-- **`/play <url>`** - Play a YouTube video or playlist.  
+- **`/play <url>`** - Play a YouTube video or playlist.
   Parameter: `url` – YouTube video URL or playlist URL (`https://www.youtube.com/playlist?list=LIST_ID`).
 
 - **`/local`** - List all local music files available.
@@ -110,17 +110,19 @@ Alternatively you can create a name.bat file that contains the command "python d
 
 - **`/resume`** - Resume playback.
 
-- **`/clearqueue`** - Clears the song queue.
+- **`/autoplay`** - Toggle autoplay mode (per server). Plays random local files when the queue is empty.
+
+- **`/clearqueue`** - Clears the song queue (shows how many songs were removed).
 
 ### Downloads
-- **`/download [arg]`** - Download the currently playing song or choose from queue/local.  
+- **`/download [arg]`** - Download the currently playing song or choose from queue/local.
   Optional parameter: `arg` – leave empty for current song, or `'queue'` / `'local'`.
 
 ### Text-to-Speech
-- **`/tts <text> [lang] [keepfile]`** - Send a text-to-speech message in the voice channel.  
-  Parameters:  
-  - `text` (max 500 chars) – text to speak  
-  - `lang` – optional, TTS model: `'en'`, `'de'`, `'com'`  
+- **`/tts <text> [lang] [keepfile]`** - Send a text-to-speech message in the voice channel.
+  Parameters:
+  - `text` (max 500 chars) – text to speak
+  - `lang` – optional, TTS model: `'en'`, `'de'`, `'com'`
   - `keepfile` – `True` or `False`
 <details>
 	<summary>All languages for lang parameter</summary>
@@ -129,8 +131,26 @@ Alternatively you can create a name.bat file that contains the command "python d
 </details>
 
 
+### Control Panel Buttons
+
+The `/controls` embed provides these interactive buttons:
+
+| Button | Color | Action |
+|--------|-------|--------|
+| ⏯ Play/Pause | Green | Toggle pause/resume |
+| ⏭ Skip | Blue | Skip current song |
+| 🔀 Autoplay ON/OFF | Green | Toggle autoplay (label reflects state) |
+| 📃 Queue | Blue | Show queue with current track at top |
+| 🗑️ Clear Queue | Red | Clear queue (shows count) |
+| ℹ️ Now Playing | Blue | Show current track with elapsed time |
+| 🎵 Play Local | Grey | Browse and play local files |
+| 🔉 / 🔊 | Grey | Volume down / up (±5%) |
+| 📤 Upload Current | Grey | Upload currently playing song |
+| 📤 From Queue | Grey | Upload a song from the queue |
+| 📤 From Local | Grey | Upload a local file |
+
 ### Administration
-- **`/__clear_channel__`** - Deletes all messages in the current channel.  
+- **`/__clear_channel__`** - Deletes all messages in the current channel.
   Requires **Manage Messages** permission.
 
 </details>
@@ -139,11 +159,33 @@ Alternatively you can create a name.bat file that contains the command "python d
 	
 <summary>changelog</summary>
 
+### Main Commit 4
+
+**Bug Fixes:**
+- Fixed skip button firing twice (skipping two songs instead of one)
+- Fixed control panel buttons dying after 180 seconds
+- Fixed crash when playing local files without bot being in a voice channel
+- Fixed pagination prev/next buttons failing (interaction not deferred)
+- Fixed autoplay being global instead of per-server
+- Fixed `/play` command blocking the bot during YouTube info extraction
+- Fixed cooldown fallback defaulting to 100s instead of 10s
+- Fixed hardcoded "once per minute" cooldown error message
+
+**UI Enhancements:**
+- Color-coded control panel buttons (green = playback, blue = info, red = destructive, grey = utility)
+- Now Playing track shown in control embed footer
+- Queue count displayed in embed description
+- Autoplay button label shows current ON/OFF state
+- Volume control buttons (🔉/🔊) on the control panel
+- Now Playing display shows elapsed time (e.g. "2:34 elapsed")
+- Queue display shows current track at the top
+- Clear queue confirms how many songs were removed
+
 ### Main Commit 3
 
 - New Command /autoplay - toggle - plays random local files if the queue is empty 
 
-- attempt at fixing skip logic (needs further testing, but shouldn't double skip anymore)
+- attempt at fixing skip logic (fully fixed in Commit 4)
 
 - download_to_local now returns only the filename to avoid doubling the folder path
 
