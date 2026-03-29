@@ -35,54 +35,40 @@ if you use this, you can skip part 1,2,3,4 of the installation, and 1,2 of the u
 <img width="1842" height="898" alt="image" src="https://github.com/user-attachments/assets/2788cef1-d37c-41d4-b202-8222cf3c4866" />
 
 ## 3. Required file Structure for this Project
-```
 └── C:\your\path\your-folder
-    ├── discordmusicbot.py
-    ├── config.json
-    └── music
-        ├── song1.mp3
-        ├── song2.mp3
-        └── ...
-```
-## 4. Install the following dependencies with CMD.exe, Download Python from python.org, During installation, check ✅ “Add Python to PATH.” This will also install pip by default.
+├── discordmusicbot.py
+├── config.json
+└── music
+├── song1.mp3
+├── song2.mp3
+└── ...
+## 4. Install the following dependencies with CMD.exe, Download Python from python.org, During installation, check ✅ "Add Python to PATH." This will also install pip by default.
 
 (Indepth Guide: https://packaging.python.org/en/latest/tutorials/installing-packages/)
-
-```
 python -m ensurepip --upgrade
-```
-```
-pip --version
-```
-```
-pip install -U discord.py yt-dlp gTTS
-```
 
+pip --version
+
+pip install -U discord.py yt-dlp gTTS
 ## 5. Create an Application here https://discord.com/developers/applications/
 
 ## 6. on that Page go to -> YOUR APPLICATION -> Bot -> RESET TOKEN, copy this token and paste it into the config.json File. (⚠️NEVER COMMIT A CONFIG.JSON with YOUR TOKEN to github, and in general don't share your token)
 
 (right now the .exe will crash if there is no valid bot token in the config)
-
-```
 {
-	"BOT_TOKEN": "YOUR TOKEN GOES HERE"
+"BOT_TOKEN": "YOUR TOKEN GOES HERE"
 }
-```
-
 ## 7. on that Page go to -> Installation
    - Installation Contexts: Guild Install
    - Default Install Settings -> Scopes: applications.commands, bot
-   - Default Install Settings -> Permissions: Connect, Embed Links, Manage Messages, Send Messages, Speak, Use Embedded Activities, Use External Apps, Use Slash Commands, View Channels (If you’re testing, Admin is easiest, but for production, use least privileges.)
+   - Default Install Settings -> Permissions: Connect, Embed Links, Manage Messages, Send Messages, Speak, Use Embedded Activities, Use External Apps, Use Slash Commands, View Channels (If you're testing, Admin is easiest, but for production, use least privileges.)
 
 ## 8. in Installations -> Install Link -> Discord Provided Link -> Open the Link in your browser -> Add the Bot to one of your Servers.
 
 # Using the Bot
 
 ## 1. Start the Bot Client by opening CMD, navigate to your root folder of: discordmusicbot.py and run this command
-```
 python discordmusicbot.py
-```
 Alternatively you can create a name.bat file that contains the command "python discordmusicbot2.py"
 
 ## 2. Once the cmd runs without errors, your bot should appear as Online in your Server. ⚠️ If this command doesn't work go back up, to: [Install 4](https://github.com/Ranzlappen/discord-musicbot/edit/main/README.md#4-install-the-following-dependencies-with-cmdexe-download-python-from-pythonorg-during-installation-check--add-python-to-path-this-will-also-install-pip-by-default)
@@ -92,14 +78,14 @@ Alternatively you can create a name.bat file that contains the command "python d
 ## 3. Commands are the following and can be used with either ! or / as prefix:
 
 ### Music Controls
-- **`/controls`** - Show the music control embed.
+- **`/controls`** - Show the music control embed with color-coded buttons, now-playing footer, and queue count.
 
 ### Voice Channel
-- **`/join [clearqueue]`** - Bot joins your voice channel.  
+- **`/join [clearqueue]`** - Bot joins your voice channel.
   Optional parameter: `clearqueue` (default: `True`) – clears the queue before joining.
 
 ### Playback
-- **`/play <url>`** - Play a YouTube video or playlist.  
+- **`/play <url>`** - Play a YouTube video or playlist.
   Parameter: `url` – YouTube video URL or playlist URL (`https://www.youtube.com/playlist?list=LIST_ID`).
 
 - **`/local`** - List all local music files available.
@@ -110,17 +96,19 @@ Alternatively you can create a name.bat file that contains the command "python d
 
 - **`/resume`** - Resume playback.
 
-- **`/clearqueue`** - Clears the song queue.
+- **`/autoplay`** - Toggle autoplay mode (per server). Plays random local files when the queue is empty.
+
+- **`/clearqueue`** - Clears the song queue (shows how many songs were removed).
 
 ### Downloads
-- **`/download [arg]`** - Download the currently playing song or choose from queue/local.  
+- **`/download [arg]`** - Download the currently playing song or choose from queue/local.
   Optional parameter: `arg` – leave empty for current song, or `'queue'` / `'local'`.
 
 ### Text-to-Speech
-- **`/tts <text> [lang] [keepfile]`** - Send a text-to-speech message in the voice channel.  
-  Parameters:  
-  - `text` (max 500 chars) – text to speak  
-  - `lang` – optional, TTS model: `'en'`, `'de'`, `'com'`  
+- **`/tts <text> [lang] [keepfile]`** - Send a text-to-speech message in the voice channel.
+  Parameters:
+  - `text` (max 500 chars) – text to speak
+  - `lang` – optional, TTS model: `'en'`, `'de'`, `'com'`
   - `keepfile` – `True` or `False`
 <details>
 	<summary>All languages for lang parameter</summary>
@@ -129,8 +117,26 @@ Alternatively you can create a name.bat file that contains the command "python d
 </details>
 
 
+### Control Panel Buttons
+
+The `/controls` embed provides these interactive buttons:
+
+| Button | Color | Action |
+|--------|-------|--------|
+| ⏯ Play/Pause | Green | Toggle pause/resume |
+| ⏭ Skip | Blue | Skip current song |
+| 🔀 Autoplay ON/OFF | Green | Toggle autoplay (label reflects state) |
+| 📃 Queue | Blue | Show queue with current track at top |
+| 🗑️ Clear Queue | Red | Clear queue (shows count) |
+| ℹ️ Now Playing | Blue | Show current track with elapsed time |
+| 🎵 Play Local | Grey | Browse and play local files |
+| 🔉 / 🔊 | Grey | Volume down / up (±5%) |
+| 📤 Upload Current | Grey | Upload currently playing song |
+| 📤 From Queue | Grey | Upload a song from the queue |
+| 📤 From Local | Grey | Upload a local file |
+
 ### Administration
-- **`/__clear_channel__`** - Deletes all messages in the current channel.  
+- **`/__clear_channel__`** - Deletes all messages in the current channel.
   Requires **Manage Messages** permission.
 
 </details>
@@ -139,11 +145,33 @@ Alternatively you can create a name.bat file that contains the command "python d
 	
 <summary>changelog</summary>
 
+### Main Commit 4
+
+**Bug Fixes:**
+- Fixed skip button firing twice (skipping two songs instead of one)
+- Fixed control panel buttons dying after 180 seconds
+- Fixed crash when playing local files without bot being in a voice channel
+- Fixed pagination prev/next buttons failing (interaction not deferred)
+- Fixed autoplay being global instead of per-server
+- Fixed `/play` command blocking the bot during YouTube info extraction
+- Fixed cooldown fallback defaulting to 100s instead of 10s
+- Fixed hardcoded "once per minute" cooldown error message
+
+**UI Enhancements:**
+- Color-coded control panel buttons (green = playback, blue = info, red = destructive, grey = utility)
+- Now Playing track shown in control embed footer
+- Queue count displayed in embed description
+- Autoplay button label shows current ON/OFF state
+- Volume control buttons (🔉/🔊) on the control panel
+- Now Playing display shows elapsed time (e.g. "2:34 elapsed")
+- Queue display shows current track at the top
+- Clear queue confirms how many songs were removed
+
 ### Main Commit 3
 
 - New Command /autoplay - toggle - plays random local files if the queue is empty 
 
-- attempt at fixing skip logic (needs further testing, but shouldn't double skip anymore)
+- attempt at fixing skip logic (fully fixed in Commit 4)
 
 - download_to_local now returns only the filename to avoid doubling the folder path
 
