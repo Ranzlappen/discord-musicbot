@@ -1,5 +1,15 @@
+<p align="center">
+  <img src="assets/logo.png" width="128" height="128" alt="discord-musicbot logo">
+</p>
+
 # discord-musicbot
 lightweight discord music bot for youtube and local music
+
+> The logo in `assets/logo.png` (512×512) is part of the shared "icon
+> universe". Use it as the bot's avatar (Discord Developer Portal → Bot →
+> Icon) and, if you want it in the now-playing embed, point
+> `EMBED_IMAGE_URL` in `config.json` at its raw URL once this lands on the
+> default branch.
 
 <img width="921" height="553" alt="image" src="https://github.com/user-attachments/assets/67482351-269a-45eb-9c87-4f7b588c2d4e" />
 
