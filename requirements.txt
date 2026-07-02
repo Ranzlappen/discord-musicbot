@@ -1,0 +1,13 @@
+# Runtime dependencies for discord-musicbot.
+# Install with:  pip install -U -r requirements.txt
+#
+# discord.py[voice] pulls in PyNaCl, which is required for voice channel
+# playback. PyNaCl is also listed explicitly below to document that voice
+# depends on it (and so it is installed even if the [voice] extra is skipped).
+# FFmpeg is a separate, non-pip dependency and must be installed via your OS
+# package manager (e.g. `pkg install ffmpeg` on Termux, or ffmpeg.org on Windows).
+
+discord.py[voice]
+yt-dlp
+gTTS
+PyNaCl

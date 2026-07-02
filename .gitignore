@@ -1,0 +1,9 @@
+# Local music library and downloads (auto-created at runtime)
+music/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Note: config.json is already tracked in this repo with a placeholder token.
+# NEVER commit a config.json that contains your real BOT_TOKEN.

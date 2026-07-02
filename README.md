@@ -75,6 +75,61 @@ pip install -U discord.py yt-dlp gTTS
 
 ## 8. in Installations -> Install Link -> Discord Provided Link -> Open the Link in your browser -> Add the Bot to one of your Servers.
 
+# Run on Android (Termux)
+
+You can host the bot directly on an Android phone with [Termux](https://termux.dev).
+This is the only phone-native way to run it — the bot needs an always-on process
+(it holds a live connection to Discord and stays in voice channels), so it can't
+run on services like GitHub Actions. Still create your Discord application and bot
+token first (steps 5–8 above).
+
+### 1. Install Termux
+Install **Termux from [F-Droid](https://f-droid.org/en/packages/com.termux/)**
+(the Google Play version is deprecated and broken). Optionally also install
+**[Termux:Boot](https://f-droid.org/en/packages/com.termux.boot/)** if you want
+the bot to auto-start when the phone reboots.
+
+### 2. Get the code and run the setup script
+Open Termux and run:
+```sh
+pkg install -y git
+git clone https://github.com/Ranzlappen/discord-musicbot
+cd discord-musicbot
+bash setup-termux.sh
+```
+`setup-termux.sh` installs Python, FFmpeg, and all Python dependencies
+(including **PyNaCl**, which voice playback requires), then creates a
+`config.json` for you.
+
+### 3. Add your bot token
+Edit the generated `config.json` and paste your token into `BOT_TOKEN`:
+```sh
+nano config.json
+```
+(In nano: paste the token, then `Ctrl+O`, `Enter` to save, `Ctrl+X` to exit.)
+⚠️ Never commit a `config.json` containing your real token.
+
+### 4. Start the bot
+```sh
+bash run-termux.sh
+```
+This holds a **wake-lock** so the bot keeps running while the screen is off, and
+restarts it automatically if it crashes. Press `Ctrl+C` to stop.
+
+### Caveats
+- Exempt Termux from **battery optimization** (Android Settings → Apps → Termux →
+  Battery → Unrestricted), or the system may kill it.
+- If you force-close Termux or the phone runs out of battery, the bot stops.
+  For truly reliable 24/7 uptime, a small always-on host (VPS / Raspberry Pi) is
+  better — but Termux works well for personal use.
+- Heavy YouTube usage still carries the risks noted at the top of this README.
+
+> On desktop/server (Linux/macOS/Windows) you can install the Python
+> dependencies the same way with `pip install -U -r requirements.txt`, plus
+> FFmpeg from [ffmpeg.org](https://ffmpeg.org/). Note this list adds **PyNaCl**,
+> which the old `pip install -U discord.py yt-dlp gTTS` line above omits and
+> which is required for voice.
+
 # Using the Bot
 
 ## 1. Start the Bot Client by opening CMD, navigate to your root folder of: discordmusicbot.py and run this command
