@@ -5,5 +5,9 @@ music/
 __pycache__/
 *.py[cod]
 
+# Runtime logs written by run-termux.sh
+*.log
+*.log.1
+
 # Note: config.json is already tracked in this repo with a placeholder token.
 # NEVER commit a config.json that contains your real BOT_TOKEN.
