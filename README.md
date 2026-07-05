@@ -64,6 +64,10 @@ pip install -U discord.py yt-dlp gTTS
 
 ## 6. on that Page go to -> YOUR APPLICATION -> Bot -> RESET TOKEN, copy this token and paste it into the config.json File. (⚠️NEVER COMMIT A CONFIG.JSON with YOUR TOKEN to github, and in general don't share your token)
 
+⚠️ On the same **Bot** page, under **Privileged Gateway Intents**, enable
+**MESSAGE CONTENT INTENT**. The bot needs it for the `!` prefix commands and
+will exit at startup with an explanatory message if it is missing.
+
 (right now the .exe will crash if there is no valid bot token in the config)
 {
 "BOT_TOKEN": "YOUR TOKEN GOES HERE"
@@ -97,9 +101,11 @@ git clone https://github.com/Ranzlappen/discord-musicbot
 cd discord-musicbot
 bash setup-termux.sh
 ```
-`setup-termux.sh` installs Python, FFmpeg, and all Python dependencies
-(including **PyNaCl**, which voice playback requires), then creates a
-`config.json` for you.
+`setup-termux.sh` installs Python, FFmpeg, **Opus** (discord.py cannot find
+Android's opus library on its own — the bot loads it from Termux's lib folder),
+and all Python dependencies (including **PyNaCl**, which voice playback
+requires), then creates a `config.json` for you and smoke-tests the installed
+packages.
 
 ### 3. Add your bot token
 Edit the generated `config.json` and paste your token into `BOT_TOKEN`:
@@ -113,8 +119,28 @@ nano config.json
 ```sh
 bash run-termux.sh
 ```
-This holds a **wake-lock** so the bot keeps running while the screen is off, and
-restarts it automatically if it crashes. Press `Ctrl+C` to stop.
+This holds a **wake-lock** so the bot keeps running while the screen is off,
+restarts it automatically if it crashes (with increasing backoff, and it will
+NOT restart-loop on a bad token/config), and mirrors all output to `bot.log`
+for diagnosing crashes that happen while the phone is in your pocket.
+Press `Ctrl+C` to stop.
+
+### 5. Optional: auto-start on boot (Termux:Boot)
+Install **Termux:Boot** from F-Droid, open it once, then:
+```sh
+mkdir -p ~/.termux/boot
+cp termux-boot-start.sh ~/.termux/boot/
+```
+The bot now starts automatically after every phone reboot. If the repo is not
+in `~/discord-musicbot`, edit `BOT_DIR` in the copied script.
+
+### When YouTube stops working
+YouTube changes constantly and old `yt-dlp` versions break — this is the most
+common reason a long-running install suddenly can't play URLs. Fix it with:
+```sh
+bash run-termux.sh --update
+```
+(updates yt-dlp, then starts the bot as usual).
 
 ### Caveats
 - Exempt Termux from **battery optimization** (Android Settings → Apps → Termux →
@@ -122,6 +148,9 @@ restarts it automatically if it crashes. Press `Ctrl+C` to stop.
 - If you force-close Termux or the phone runs out of battery, the bot stops.
   For truly reliable 24/7 uptime, a small always-on host (VPS / Raspberry Pi) is
   better — but Termux works well for personal use.
+- To save battery and data, the bot leaves the voice channel after 10 idle
+  minutes by default (configurable via `IDLE_DISCONNECT_MINUTES` in
+  `config.json`, `0` disables it).
 - Heavy YouTube usage still carries the risks noted at the top of this README.
 
 > On desktop/server (Linux/macOS/Windows) you can install the Python
@@ -149,6 +178,10 @@ Alternatively you can create a name.bat file that contains the command "python d
 - **`/join [clearqueue]`** - Bot joins your voice channel.
   Optional parameter: `clearqueue` (default: `True`) – clears the queue before joining.
 
+- **`/leave`** - Bot leaves the voice channel. (It also leaves on its own after
+  `IDLE_DISCONNECT_MINUTES` of inactivity — default 10, set `0` in `config.json`
+  to disable.)
+
 ### Playback
 - **`/play <url>`** - Play a YouTube video or playlist.
   Parameter: `url` – YouTube video URL or playlist URL (`https://www.youtube.com/playlist?list=LIST_ID`).
@@ -162,6 +195,8 @@ Alternatively you can create a name.bat file that contains the command "python d
 - **`/resume`** - Resume playback.
 
 - **`/autoplay`** - Toggle autoplay mode (per server). Plays random local files when the queue is empty.
+
+- **`/volume <percent>`** - Set playback volume (0–100). The value is remembered per server for the next songs.
 
 - **`/clearqueue`** - Clears the song queue (shows how many songs were removed).
 
@@ -209,6 +244,37 @@ The `/controls` embed provides these interactive buttons:
 <details>
 	
 <summary>changelog</summary>
+
+### Main Commit 5 — hardening + Termux compatibility
+
+**Security:**
+- Dropdown selections (play local / upload local / upload from queue) are now
+  validated server-side — malformed clients can no longer request files outside
+  the `music/` folder
+- `/__clear_channel__` purges at most 1000 messages per invocation
+
+**Bug fixes & robustness:**
+- Songs that repeatedly fail to start are skipped instead of retrying forever
+- TTS no longer risks hanging forever (playback-finished signal was not thread-safe)
+- Control panel buttons are handled by a persistent view (no more race with
+  dropdown menus; buttons keep working after a bot restart)
+- Commands no longer stall for the message-cleanup delay before finishing
+- Slash commands sync once at startup instead of on every reconnect
+- Playlists with private/deleted videos no longer crash `/play` (they're skipped and counted)
+- Voice connects retry once and report failures instead of failing silently
+- Upload size limit follows the server's actual Discord limit instead of a hardcoded 8MB
+- Friendly startup errors for bad tokens, missing Message Content intent, and broken config
+- Proper logging (also to `bot.log` via run-termux.sh) instead of prints
+- Control embed refreshes its queue count / now-playing footer as playback progresses
+
+**New:**
+- `/leave` command
+- Idle auto-disconnect after `IDLE_DISCONNECT_MINUTES` (default 10, `0` = off) — saves phone battery/data
+- `/volume <0-100>` with per-server volume memory
+- `run-termux.sh --update` refreshes yt-dlp; crash restarts now back off; output logged to `bot.log`
+- `termux-boot-start.sh` for auto-start via Termux:Boot
+- Opus library is loaded explicitly (fixes silent voice failure on Termux/Android)
+- requirements.txt pins minimum versions (discord.py ≥ 2.4 for Python 3.13 support)
 
 ### Main Commit 4
 

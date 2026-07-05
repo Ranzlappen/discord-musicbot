@@ -4,10 +4,13 @@
 # discord.py[voice] pulls in PyNaCl, which is required for voice channel
 # playback. PyNaCl is also listed explicitly below to document that voice
 # depends on it (and so it is installed even if the [voice] extra is skipped).
-# FFmpeg is a separate, non-pip dependency and must be installed via your OS
-# package manager (e.g. `pkg install ffmpeg` on Termux, or ffmpeg.org on Windows).
+# discord.py >= 2.4 is required for Python 3.13 support (the stdlib audioop
+# module was removed there; discord.py 2.4+ depends on audioop-lts instead).
+# FFmpeg and libopus are separate, non-pip dependencies and must be installed
+# via your OS package manager (e.g. `pkg install ffmpeg opus` on Termux, or
+# ffmpeg.org on Windows).
 
-discord.py[voice]
-yt-dlp
-gTTS
-PyNaCl
+discord.py[voice]>=2.4,<3
+yt-dlp>=2025.1.26
+gTTS>=2.5
+PyNaCl>=1.5
